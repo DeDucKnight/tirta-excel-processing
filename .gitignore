@@ -22,3 +22,6 @@ Sample/
 
 # Logs
 *.log
+
+# Excel files
+*.xlsx
