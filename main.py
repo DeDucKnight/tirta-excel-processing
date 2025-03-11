@@ -13,6 +13,28 @@ import openpyxl
 from openpyxl.styles import PatternFill, Alignment, Border, Side, Font
 import uuid
 
+def int_to_roman(num):
+        val = [
+            1000, 900, 500, 400,
+            100, 90, 50, 40,
+            10, 9, 5, 4,
+            1
+        ]
+        syms = [
+            "M", "CM", "D", "CD",
+            "C", "XC", "L", "XL",
+            "X", "IX", "V", "IV",
+            "I"
+        ]
+        roman_num = ""
+        i = 0
+        while num > 0:
+            count = num // val[i]
+            roman_num += syms[i] * count
+            num %= val[i]
+            i += 1
+        return roman_num
+
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
@@ -54,26 +76,6 @@ class Ui_MainWindow(object):
         self.numNoRadioButton.setGeometry(QtCore.QRect(10, 60, 91, 20))
         self.numNoRadioButton.setObjectName("numNoRadioButton")
 
-        # Header Group Box
-        self.headerGroupBox = QtWidgets.QGroupBox(parent=self.centralwidget)
-        self.headerGroupBox.setGeometry(QtCore.QRect(20, 230, 681, 101))
-        self.headerGroupBox.setObjectName("headerGroupBox")
-        self.headerYesRadioButton = QtWidgets.QRadioButton(parent=self.headerGroupBox)
-        self.headerYesRadioButton.setGeometry(QtCore.QRect(10, 30, 89, 20))
-        self.headerYesRadioButton.setObjectName("headerYesRadioButton")
-        self.headerNoRadioButton = QtWidgets.QRadioButton(parent=self.headerGroupBox)
-        self.headerNoRadioButton.setGeometry(QtCore.QRect(10, 60, 89, 20))
-        self.headerNoRadioButton.setObjectName("headerNoRadioButton")
-        self.headerRowLineEdit = QtWidgets.QLineEdit(parent=self.headerGroupBox)
-        self.headerRowLineEdit.setGeometry(QtCore.QRect(240, 30, 113, 22))
-        self.headerRowLineEdit.setObjectName("headerRowLineEdit")
-        self.headerRowLabel = QtWidgets.QLabel(parent=self.headerGroupBox)
-        self.headerRowLabel.setGeometry(QtCore.QRect(120, 30, 121, 21))
-        self.headerRowLabel.setObjectName("headerRowLabel")
-        self.headerRowLabel.setVisible(False)
-        self.headerRowLineEdit.setVisible(False)
-        self.headerRowLineEdit.setEnabled(False)
-
         # Generate Button
         self.generateButton = QtWidgets.QPushButton(parent=self.centralwidget)
         self.generateButton.setGeometry(QtCore.QRect(590, 390, 111, 31))
@@ -99,7 +101,6 @@ class Ui_MainWindow(object):
         # Connect button click events to custom slots
         self.uploadButton.clicked.connect(self.on_uploadButton_clicked)
         self.generateButton.clicked.connect(self.on_generateButton_clicked)
-        self.headerYesRadioButton.toggled.connect(self.on_headerYesRadioButton_toggled)
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
@@ -110,14 +111,7 @@ class Ui_MainWindow(object):
         self.numberGroupBox.setTitle(_translate("MainWindow", "Apakah file memiliki sistem penomoran?"))
         self.numYesRadioButton.setText(_translate("MainWindow", "Ada"))
         self.numNoRadioButton.setText(_translate("MainWindow", "Tidak ada"))
-        self.headerGroupBox.setTitle(_translate("MainWindow", "Apakah file memiliki header?"))
-        self.headerYesRadioButton.setText(_translate("MainWindow", "Ada"))
-        self.headerNoRadioButton.setText(_translate("MainWindow", "Tidak ada"))
-        self.headerRowLineEdit.setInputMask(_translate("MainWindow", "00"))
-        self.headerRowLabel.setText(_translate("MainWindow", "Jumlah baris header:"))
         self.generateButton.setText(_translate("MainWindow", "Buat excel"))
-        self.actiontest1.setText(_translate("MainWindow", "test1"))
-        self.actiontest2.setText(_translate("MainWindow", "test2?"))
 
     def on_uploadButton_clicked(self):
         options = QFileDialog.Option.DontUseNativeDialog
@@ -160,46 +154,38 @@ class Ui_MainWindow(object):
         selected_sheet = self.sheetComboBox.currentText()
 
         try:
-            # 2. Determine how many rows to skip (if headerYes is checked)
-            skip_count = 0
-            if self.headerYesRadioButton.isChecked():
-                try:
-                    skip_count = int(self.headerRowLineEdit.text())
-                except ValueError:
-                    skip_count = 0  # fallback if user typed something invalid
+            # Read excel file
+            df = pd.read_excel(self.file_path, sheet_name=selected_sheet)
 
-            # 3. Read the Excel sheet, skipping rows if needed
-            df = pd.read_excel(self.file_path, sheet_name=selected_sheet, skiprows=skip_count)
-
-            # 4. If numYesRadioButton is checked, ignore the first column of the uploaded Excel
+            # If numYesRadioButton is checked, ignore the first column of the uploaded Excel
             material_column = 0
-            # if self.numYesRadioButton.isChecked():
-            #     # Drop the first column
-            #     df = df.iloc[:, 1:]
+            price_column = 4
+            if self.numYesRadioButton.isChecked():
+                material_column = 1
+                price_column = 5
 
-            # ----------------------------------------------------------------
-            # 5. Create a new Excel file with openpyxl & apply formatting
-            # ----------------------------------------------------------------
+            # Create a new Excel file
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = "Formatted Data"
 
-            # 6. Set column widths (tweak as needed)
-            ws.column_dimensions["A"].width = 3    # small
+            # Set column widths (tweak as needed)
+            ws.column_dimensions["A"].width = 3
             ws.column_dimensions["B"].width = 7
-            ws.column_dimensions["C"].width = 89   # bigger
+            ws.column_dimensions["C"].width = 89
             ws.column_dimensions["D"].width = 12
             ws.column_dimensions["E"].width = 15
             ws.column_dimensions["F"].width = 13
             ws.column_dimensions["G"].width = 14
 
-            # 7. Row 11 is a fixed header row
             start_header_row = 11
             ws.row_dimensions[start_header_row].height = 25
 
             # Styles
+            # Fill
             header_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
             
+            # Borders
             thin_border = Border(
                 left=Side(style='thin'),
                 right=Side(style='thin'),
@@ -235,12 +221,12 @@ class Ui_MainWindow(object):
                 bottom=Side(style='thin')
             )
 
+            # Alignments
             center_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
             left_alignment = Alignment(horizontal="left", vertical="center")
             right_alignment = Alignment(horizontal="right", vertical="center")
 
-            # 8. Write a fixed header row in the *new* Excel
-            #    (Adjust text to match your exact requirement)
+            # Excel header titles
             header_titles = [
                 ("B", "No"),
                 ("C", "Uraian - Pekerjaan"),
@@ -257,35 +243,78 @@ class Ui_MainWindow(object):
                 cell.alignment = center_alignment
                 cell.font = Font(bold=True)
 
-            # 9. Write the data starting at row 12 (since row 11 is header)
+            # Write the data
             data_start_row = start_header_row + 1
+            title_row = 0
+            subsection_row = 0
+            subsection_total = 0
+            last_subsection_row = 0
 
             for i, row_data in enumerate(df.values, start=data_start_row):
                 # i is the row in the *new* Excel
                 # row_data is the entire row from the DataFrame
 
-                # Safety check: skip rows that don't have enough columns
-                # (in case df has fewer columns than we expect)
                 if len(row_data) < 5:
                     continue
 
                 # Column B in new Excel = df col 0 = Numbering
+                cell_b = ws.cell(row=i, column=2)
+                cell_b.border = left_cell_border
+                cell_b.alignment = center_alignment
                 if self.numYesRadioButton.isChecked():
-                    cell_b = ws.cell(row=i, column=2, value=row_data[0])
-                    cell_b.border = left_cell_border
-                    cell_b.alignment = center_alignment
-                    material_column = 1
+                        cell_b.value = row_data[0]
+
 
                 # Column C in new Excel = df col 1 = Material
-                if len(row_data) > 1:
-                    cell_c = ws.cell(row=i, column=3, value=row_data[material_column])
-                    cell_c.border = material_cell_border
-                    cell_c.alignment = left_alignment
+                cell_c = ws.cell(row=i, column=3, value=row_data[material_column])
+                cell_c.border = material_cell_border
+                cell_c.alignment = left_alignment
 
                 # Column D in new Excel = df col 4 = Bobot % (I)
-                cell_d = ws.cell(row=i, column=4, value=row_data[4])
+                cell_d = ws.cell(row=i, column=4)
                 cell_d.border = thin_border
                 cell_d.alignment = right_alignment
+
+                # Logic for price column
+                price_val = row_data[price_column]
+                price_str = str(price_val).strip()
+
+                if price_str.upper() == "T":
+                    # It's a title (just skip or handle accordingly)
+                    if self.numYesRadioButton.isChecked() is not True:
+                        cell_b.value = int_to_roman(title_row)
+
+                    cell_c.font = Font(bold=True, italic=True)
+
+                    # calculate subtotal
+                    if last_subsection_row > 1 and subsection_total > 0:
+                        cell_subsection_total_label = ws.cell(row=last_subsection_row+1, column=3, value="Total")
+                        cell_subsection_total_value = ws.cell(row=last_subsection_row+1, column=4, value=subsection_total)
+                        subsection_row = 0
+                        subsection_total = 0
+                        last_subsection_row = 0
+                    # reset subsection row
+                else:
+                    try:
+                        # Attempt to parse as float
+                        # Optionally, remove commas if your data sometimes includes them
+                        price_float = float(price_str.replace(".", ""))
+                        if price_float > 0:
+                            cell_d.value = price_float
+                            cell_b.value = subsection_row
+                            subsection_row += 1
+                            subsection_total += price_float
+                            last_subsection_row = i
+
+                            if self.numYesRadioButton.isChecked() is not True:
+                                cell_b.value = subsection_row
+
+                        # If successful, do your calculation
+                        # e.g., total_price = price_float * some_factor
+
+                    except ValueError:
+                        # It's not numeric, just copy it
+                        cell_d.value = ""
 
                 # Column E in new Excel
                 cell_e = ws.cell(row=i, column=5, value="-")
@@ -302,9 +331,7 @@ class Ui_MainWindow(object):
                 cell_g.border = right_cell_border
                 cell_g.alignment = right_alignment
 
-            # ---------------------------------------------------------
-            # 10. Last row
-            # ---------------------------------------------------------
+            # Last row
             end_row = data_start_row + len(df) - 1  # if df has X rows, last row is start + X - 1
 
             # Merge rows
@@ -414,12 +441,12 @@ class Ui_MainWindow(object):
         except Exception as e:
             QMessageBox.critical(None, "Error", f"Failed to create formatted Excel:\n{str(e)}")
 
-
     def on_headerYesRadioButton_toggled(self, checked):
+        pass
         # Show or hide the header row input controls based on the radio button state
-        self.headerRowLabel.setVisible(checked)
-        self.headerRowLineEdit.setVisible(checked)
-        self.headerRowLineEdit.setEnabled(checked)
+        # self.headerRowLabel.setVisible(checked)
+        # self.headerRowLineEdit.setVisible(checked)
+        # self.headerRowLineEdit.setEnabled(checked)
 
 
 if __name__ == "__main__":
@@ -430,3 +457,9 @@ if __name__ == "__main__":
     ui.setupUi(MainWindow)
     MainWindow.show()
     sys.exit(app.exec())
+
+    # to do:
+    # remove header
+    # fix numbering system
+    # subtotal per section
+    # check title format with "T"
