@@ -12,6 +12,7 @@ import pandas as pd
 import openpyxl
 from openpyxl.styles import PatternFill, Alignment, Border, Side, Font
 import uuid
+import re
 
 def int_to_roman(num):
         val = [
@@ -34,6 +35,33 @@ def int_to_roman(num):
             num %= val[i]
             i += 1
         return roman_num
+
+def parse_numbered_item(text: str, max_prefix_len: int = 4):
+    """
+    Checks only the first `max_prefix_len` characters of `text` to see if it
+    looks like a numbering system (e.g., "A.", "1)", "3-"). If found, returns
+    [number_part, item_part]. Otherwise, returns an empty list.
+    """
+    text = text.strip()
+    # Extract up to `max_prefix_len` characters from the start
+    prefix_candidate = text[:max_prefix_len]
+
+    try:
+        # Define a simple pattern: one or more letters/digits, optionally followed by ., ), or -
+        # and optional spaces. e.g., "1.", "A)", "3-", "2) "
+        pattern = r'^([A-Za-z0-9]+[\.\)\-]?)\s*$'
+        match = re.match(pattern, prefix_candidate.strip())
+        if match:
+            # We found a numbering prefix in the first few characters
+            number_str = match.group(1).rstrip(".)-")  # e.g. "1", "A", "3"
+            # The rest of the text is the item part
+            item_part = text[len(prefix_candidate):].strip()
+            return [number_str, item_part]
+        else:
+            # No numbering found in the first few chars
+            return []
+    except Exception as e:
+        return []
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -155,7 +183,7 @@ class Ui_MainWindow(object):
 
         try:
             # Read excel file
-            df = pd.read_excel(self.file_path, sheet_name=selected_sheet)
+            df = pd.read_excel(self.file_path, sheet_name=selected_sheet, dtype=str)
 
             # If numYesRadioButton is checked, ignore the first column of the uploaded Excel
             material_column = 0
@@ -226,6 +254,39 @@ class Ui_MainWindow(object):
             left_alignment = Alignment(horizontal="left", vertical="center")
             right_alignment = Alignment(horizontal="right", vertical="center")
 
+            # Header Titles
+
+            # Cell D2: "CV. TIRTA KUSUMA"
+            ws["D2"].value = "CV. TIRTA KUSUMA"
+            ws["D2"].font = Font(name="Cooper Black", size=20, bold=True)
+            ws["D2"].alignment = Alignment(horizontal="center", vertical="center")
+
+            # Cell D3: "General Contractor"
+            ws["D3"].value = "General Contractor"
+            ws["D3"].font = Font(name="Bodoni MT Black", size=14, bold=True)
+            ws["D3"].alignment = Alignment(horizontal="center", vertical="center")
+
+            # Cell D4: "Jl. Manyar Rejo V / 26, Surabaya 60118. Telp.  : 031-5912879, Fax  : 031-5913274"
+            ws["D4"].value = "Jl. Manyar Rejo V / 26, Surabaya 60118. Telp.  : 031-5912879, Fax  : 031-5913274"
+            ws["D4"].font = Font(name="Constantia", size=10)
+            ws["D4"].alignment = Alignment(horizontal="center", vertical="center")
+
+            # Cell D5: "E-mail : tirtakusuma26@yahoo.com"
+            ws["D5"].value = "E-mail : tirtakusuma26@yahoo.com"
+            ws["D5"].font = Font(name="Constantia", size=10)
+            ws["D5"].alignment = Alignment(horizontal="center", vertical="center")
+
+            # Thick bottom border on row 5, columns B through G
+            thick_side = Side(style='thick')
+            for col in range(2, 8):  # B=2 through G=7
+                cell = ws.cell(row=5, column=col)
+                cell.border = Border(
+                    left=cell.border.left,
+                    right=cell.border.right,
+                    top=cell.border.top,
+                    bottom=thick_side
+                )
+
             # Excel header titles
             header_titles = [
                 ("B", "No"),
@@ -245,7 +306,7 @@ class Ui_MainWindow(object):
 
             # Write the data
             data_start_row = start_header_row + 1
-            title_row = 0
+            title_row = 1
             subsection_row = 0
             subsection_total = 0
             last_subsection_row = 0
@@ -276,39 +337,90 @@ class Ui_MainWindow(object):
                 cell_d.alignment = right_alignment
 
                 # Logic for price column
-                price_val = row_data[price_column]
-                price_str = str(price_val).strip()
+                price_str = str(row_data[price_column]).strip()
 
                 if price_str.upper() == "T":
-                    # It's a title (just skip or handle accordingly)
                     if self.numYesRadioButton.isChecked() is not True:
-                        cell_b.value = int_to_roman(title_row)
+                        parse_item = parse_numbered_item(cell_c.value)
+                        if parse_item:
+                            cell_c.value = parse_item[1]
+                            cell_b.value = parse_item[0]
+                        else:
+                            cell_b.value = int_to_roman(title_row)
+                        title_row += 1
 
                     cell_c.font = Font(bold=True, italic=True)
 
                     # calculate subtotal
                     if last_subsection_row > 1 and subsection_total > 0:
-                        cell_subsection_total_label = ws.cell(row=last_subsection_row+1, column=3, value="Total")
-                        cell_subsection_total_value = ws.cell(row=last_subsection_row+1, column=4, value=subsection_total)
+                        cell_subsection_total_label = ws.cell(row=last_subsection_row+1, column=3)
+                        cell_subsection_total_label.border = Border(
+                            left=cell_subsection_total_label.border.left,
+                            right=cell_subsection_total_label.border.right,
+                            top=Side(style='double'),
+                            bottom=Side(style='double')
+                        )
+
+                        cell_subsection_total_value = ws.cell(row=last_subsection_row+1, column=4)
+                        cell_subsection_total_value.value = subsection_total
+                        cell_subsection_total_value.border = Border(
+                            left=cell_subsection_total_value.border.left,
+                            right=cell_subsection_total_value.border.right,
+                            top=Side(style='double'),
+                            bottom=Side(style='double')
+                        )
+
+                        # double line border
+                        cell_subtotal_e = ws.cell(row=last_subsection_row+1, column=5)
+                        cell_subtotal_e.border = Border(
+                            left=cell_subtotal_e.border.left,
+                            right=cell_subtotal_e.border.right,
+                            top=Side(style='double'),
+                            bottom=Side(style='double')
+                        )
+
+                        cell_subtotal_f = ws.cell(row=last_subsection_row+1, column=6)
+                        cell_subtotal_f.border = Border(
+                            left=cell_subtotal_f.border.left,
+                            right=cell_subtotal_f.border.right,
+                            top=Side(style='double'),
+                            bottom=Side(style='double')
+                        )
+
+                        cell_subtotal_g = ws.cell(row=last_subsection_row+1, column=7)
+                        cell_subtotal_g.border = Border(
+                            left=cell_subtotal_g.border.left,
+                            right=cell_subtotal_g.border.right,
+                            top=Side(style='double'),
+                            bottom=Side(style='double')
+                        )
+
+                        # reset subsection row
                         subsection_row = 0
                         subsection_total = 0
                         last_subsection_row = 0
-                    # reset subsection row
+                elif price_str in ["-", "", "nan"]:
+                    # It's a dash or empty cell
+                    cell_d.value = ""
                 else:
                     try:
                         # Attempt to parse as float
-                        # Optionally, remove commas if your data sometimes includes them
                         price_float = float(price_str.replace(".", ""))
-                        if price_float > 0:
-                            cell_d.value = price_float
-                            cell_b.value = subsection_row
-                            subsection_row += 1
-                            subsection_total += price_float
-                            last_subsection_row = i
+                        cell_d.value = price_float
+                        cell_b.value = subsection_row
+                        subsection_row += 1
+                        subsection_total += price_float
+                        last_subsection_row = i
 
-                            if self.numYesRadioButton.isChecked() is not True:
-                                cell_b.value = subsection_row
-
+                        # if self.numYesRadioButton.isChecked() is not True:
+                        #     parse_item = parse_numbered_item(cell_c.value)
+                        #     if parse_item:
+                        #         cell_c.value = parse_item[1]
+                        #         cell_b.value = parse_item[0]
+                        #     else:
+                        #         cell_b.value = subsection_row
+                        #     cell_b.value = subsection_row
+                            
                         # If successful, do your calculation
                         # e.g., total_price = price_float * some_factor
 
@@ -339,10 +451,6 @@ class Ui_MainWindow(object):
             merge_end = end_row + 2
 
             # MERGE FOR COLUMN B
-            ws.merge_cells(
-                start_row=merge_start, start_column=2,  # B=2
-                end_row=merge_end,   end_column=2
-            )
             merged_cell_b = ws.cell(row=merge_start, column=2)
             merged_cell_b.value = ""
             merged_cell_b.alignment = center_alignment
@@ -355,10 +463,6 @@ class Ui_MainWindow(object):
             merged_cell_b.font = Font(bold=True)
 
             # MERGE FOR COLUMN C
-            ws.merge_cells(
-                start_row=merge_start, start_column=3,  # C=3
-                end_row=merge_end,   end_column=3
-            )
             merged_cell_c = ws.cell(row=merge_start, column=3)
             merged_cell_c.value = "TOTAL"
             merged_cell_c.alignment = center_alignment
@@ -371,10 +475,6 @@ class Ui_MainWindow(object):
             merged_cell_c.font = Font(bold=True)
 
             # MERGE FOR COLUMN D
-            ws.merge_cells(
-                start_row=merge_start, start_column=4,  # D=4
-                end_row=merge_end, end_column=4
-            )
             merged_cell_d = ws.cell(row=merge_start, column=4)
             merged_cell_d.value = 100.00
             merged_cell_d.alignment = right_alignment
@@ -386,10 +486,6 @@ class Ui_MainWindow(object):
             )
 
             # MERGE FOR COLUMN E
-            ws.merge_cells(
-                start_row=merge_start, start_column=5,  # E=5
-                end_row=merge_end, end_column=5
-            )
             merged_cell_e = ws.cell(row=merge_start, column=5)
             merged_cell_e.value = "-"
             merged_cell_e.alignment = right_alignment
@@ -401,10 +497,6 @@ class Ui_MainWindow(object):
             )
 
             # MERGE FOR COLUMN F
-            ws.merge_cells(
-                start_row=merge_start, start_column=6,  # F=6
-                end_row=merge_end, end_column=6
-            )
             merged_cell_f = ws.cell(row=merge_start, column=6)
             merged_cell_f.value = "-"
             merged_cell_f.alignment = right_alignment
@@ -416,10 +508,6 @@ class Ui_MainWindow(object):
             )
 
             # MERGE FOR COLUMN G
-            ws.merge_cells(
-                start_row=merge_start, start_column=7,  # G=7
-                end_row=merge_end, end_column=7
-            )
             merged_cell_g = ws.cell(row=merge_start, column=7)
             merged_cell_g.value = "-"
             merged_cell_g.alignment = right_alignment
