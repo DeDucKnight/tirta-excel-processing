@@ -11,9 +11,8 @@ from PyQt6.QtWidgets import QFileDialog, QMessageBox
 import pandas as pd
 import openpyxl
 from openpyxl.styles import PatternFill, Alignment, Border, Side, Font
-import uuid
-import re
 import math
+import os
 
 def int_to_roman(num):
         val = [
@@ -526,13 +525,26 @@ class Ui_MainWindow(object):
                 bottom=Side(style='thick')
             )
             
-            # Save the new Excel file
-            guid = uuid.uuid4()
-            output_file = f"formatted_output_{guid}.xlsx"
-            wb.save(output_file)
+            # Save file
+            desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
+            default_filename = os.path.join(desktop_path, "TirtaExcelOutput.xlsx")
+            save_path, _ = QFileDialog.getSaveFileName(
+                None,
+                "Save Excel File",
+                default_filename,
+                "Excel Files (*.xlsx)"
+            )
 
-            # Notify the user
-            QMessageBox.information(None, "Success", f"Data formatted and saved to {output_file}")
+            if save_path:
+                try:
+                    wb.save(save_path)
+                    QMessageBox.information(None, "Success", f"File saved to:\n{save_path}")
+                except PermissionError:
+                    QMessageBox.warning(None, "Access Denied",
+                        "You do not have permission to save in that folder.\nPlease choose a different location.")
+                except OSError as e:
+                    QMessageBox.warning(None, "Error",
+                        f"Failed to save the file:\n{e}\nPlease choose a different location.")
 
             self.reset_state()
         except Exception as e:
