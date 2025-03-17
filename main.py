@@ -13,6 +13,7 @@ import openpyxl
 from openpyxl.styles import PatternFill, Alignment, Border, Side, Font
 import uuid
 import re
+import math
 
 def int_to_roman(num):
         val = [
@@ -38,32 +39,49 @@ def int_to_roman(num):
 
 def parse_numbered_item(text: str, max_prefix_len: int = 4):
     """
-    Checks only the first `max_prefix_len` characters of `text` to see if it
-    looks like a numbering system (e.g., "A.", "1)", "3-"). If found, returns
-    [number_part, item_part]. Otherwise, returns an empty list.
+    Checks the first `max_prefix_len` characters of `text` for a '.' or ')'.
+    If found, splits the text at the earliest occurrence of either character,
+    and returns [number_part, item_part]. Otherwise, returns an empty list.
     """
     text = text.strip()
-    # Extract up to `max_prefix_len` characters from the start
-    prefix_candidate = text[:max_prefix_len]
-
-    try:
-        # Define a simple pattern: one or more letters/digits, optionally followed by ., ), or -
-        # and optional spaces. e.g., "1.", "A)", "3-", "2) "
-        pattern = r'^([A-Za-z0-9]+[\.\)\-]?)\s*$'
-        match = re.match(pattern, prefix_candidate.strip())
-        if match:
-            # We found a numbering prefix in the first few characters
-            number_str = match.group(1).rstrip(".)-")  # e.g. "1", "A", "3"
-            # The rest of the text is the item part
-            item_part = text[len(prefix_candidate):].strip()
-            return [number_str, item_part]
-        else:
-            # No numbering found in the first few chars
-            return []
-    except Exception as e:
+    # Look only at the first max_prefix_len characters
+    prefix_section = text[:max_prefix_len]
+    
+    # Find the index of '.' and ')' within that section
+    period_index = prefix_section.find('.')
+    paren_index = prefix_section.find(')')
+    
+    # Create a list of valid indices (i.e. those that are not -1)
+    valid_indices = [idx for idx in (period_index, paren_index) if idx != -1]
+    
+    if valid_indices:
+        # Use the earliest occurrence
+        split_index = min(valid_indices)
+        # The numbering is all characters before the punctuation
+        numbering = text[:split_index].strip()
+        # The item text is the remainder after the punctuation
+        item_part = text[split_index+1:].strip()
+        return [numbering, item_part]
+    else:
         return []
 
 class Ui_MainWindow(object):
+    def reset_state(self):
+        # Clear stored file path and DataFrame
+        self.file_path = None
+        self.df = None
+
+        # Reset file name label to default
+        self.fileNameLabel.setText("Tidak ada file")
+
+        # Clear and hide the worksheet combo box and its label
+        self.sheetComboBox.clear()
+        self.sheetComboBox.setVisible(False)
+        self.sheetLabel.setVisible(False)
+
+        # Disable the generate button
+        self.generateButton.setEnabled(False)
+    
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
         MainWindow.resize(724, 483)
@@ -164,12 +182,6 @@ class Ui_MainWindow(object):
 
                 # Enable the generate button since a file has been chosen
                 self.generateButton.setEnabled(True)
-
-                # Optionally, show a preview of the first sheet
-                df_preview = pd.read_excel(file_name, sheet_name=sheet_names[0])
-                preview = df_preview.head().to_string(index=False)
-                QMessageBox.information(None, "Excel Preview", f"Sheet: {sheet_names[0]}\nFirst 5 Rows:\n{preview}")
-
             except Exception as e:
                 QMessageBox.critical(None, "Error", f"Failed to read file:\n{str(e)}")
 
@@ -191,6 +203,23 @@ class Ui_MainWindow(object):
             if self.numYesRadioButton.isChecked():
                 material_column = 1
                 price_column = 5
+
+            # calculate total price
+            total_price = 0
+
+            for row_data in df.values:
+                price_str = str(row_data[price_column]).strip()
+                try:
+                    normalized = price_str.replace(".", "").replace(",", ".")
+                    price_value = float(normalized)
+
+                    if math.isnan(price_value):
+                        price_value = 0.0
+                except ValueError:
+                    # If conversion fails (e.g., "T", "-", or any non-numeric), use 0
+                    price_value = 0.0
+
+                total_price += price_value
 
             # Create a new Excel file
             wb = openpyxl.Workbook()
@@ -314,7 +343,7 @@ class Ui_MainWindow(object):
             for i, row_data in enumerate(df.values, start=data_start_row):
                 # i is the row in the *new* Excel
                 # row_data is the entire row from the DataFrame
-
+                
                 if len(row_data) < 5:
                     continue
 
@@ -322,6 +351,7 @@ class Ui_MainWindow(object):
                 cell_b = ws.cell(row=i, column=2)
                 cell_b.border = left_cell_border
                 cell_b.alignment = center_alignment
+                cell_b.font = Font(name="Arial", size=10, bold=True)
                 if self.numYesRadioButton.isChecked():
                         cell_b.value = row_data[0]
 
@@ -329,11 +359,13 @@ class Ui_MainWindow(object):
                 # Column C in new Excel = df col 1 = Material
                 cell_c = ws.cell(row=i, column=3, value=row_data[material_column])
                 cell_c.border = material_cell_border
+                cell_c.font = Font(name="Arial", size=11, italic=True)
                 cell_c.alignment = left_alignment
 
                 # Column D in new Excel = df col 4 = Bobot % (I)
                 cell_d = ws.cell(row=i, column=4)
                 cell_d.border = thin_border
+                cell_d.font = Font(name="Arial", size=10, italic=True)
                 cell_d.alignment = right_alignment
 
                 # Logic for price column
@@ -348,8 +380,9 @@ class Ui_MainWindow(object):
                         else:
                             cell_b.value = int_to_roman(title_row)
                         title_row += 1
-
-                    cell_c.font = Font(bold=True, italic=True)
+                    
+                    cell_b.font = Font(name="Arial Black", size=10, bold=True)
+                    cell_c.font = Font(name="Arial Black", size=10, bold=True, italic=True)
 
                     # calculate subtotal
                     if last_subsection_row > 1 and subsection_total > 0:
@@ -363,6 +396,7 @@ class Ui_MainWindow(object):
 
                         cell_subsection_total_value = ws.cell(row=last_subsection_row+1, column=4)
                         cell_subsection_total_value.value = subsection_total
+                        cell_subsection_total_value.font = Font(bold=True)
                         cell_subsection_total_value.border = Border(
                             left=cell_subsection_total_value.border.left,
                             right=cell_subsection_total_value.border.right,
@@ -387,7 +421,7 @@ class Ui_MainWindow(object):
                             bottom=Side(style='double')
                         )
 
-                        cell_subtotal_g = ws.cell(row=last_subsection_row+1, column=7)
+                        cell_subtotal_g = ws.cell(row=last_subsection_row+1, column=7, value="-")
                         cell_subtotal_g.border = Border(
                             left=cell_subtotal_g.border.left,
                             right=cell_subtotal_g.border.right,
@@ -400,36 +434,34 @@ class Ui_MainWindow(object):
                         subsection_total = 0
                         last_subsection_row = 0
                 elif price_str in ["-", "", "nan"]:
-                    # It's a dash or empty cell
+                    # It's an empty cell
                     cell_d.value = ""
                 else:
                     try:
                         # Attempt to parse as float
-                        price_float = float(price_str.replace(".", ""))
-                        cell_d.value = price_float
-                        cell_b.value = subsection_row
+                        price_float = float(price_str.replace(".", "").replace(",", "."))
+                        price_weight = price_float / total_price
+                        # cell_d.value = round(price_float / total_price, 4)
+                        cell_d.value = price_weight
                         subsection_row += 1
-                        subsection_total += price_float
+                        subsection_total += price_weight
                         last_subsection_row = i
 
-                        # if self.numYesRadioButton.isChecked() is not True:
-                        #     parse_item = parse_numbered_item(cell_c.value)
-                        #     if parse_item:
-                        #         cell_c.value = parse_item[1]
-                        #         cell_b.value = parse_item[0]
-                        #     else:
-                        #         cell_b.value = subsection_row
-                        #     cell_b.value = subsection_row
-                            
-                        # If successful, do your calculation
-                        # e.g., total_price = price_float * some_factor
-
+                        if self.numYesRadioButton.isChecked() is not True:
+                            parse_item = parse_numbered_item(str(cell_c.value))
+                            if parse_item:
+                                cell_c.value = parse_item[1]
+                                cell_b.value = parse_item[0]
+                            else:
+                                cell_b.value = subsection_row
+                        else:
+                            cell_b.value = row_data[0]
+        
                     except ValueError:
-                        # It's not numeric, just copy it
                         cell_d.value = ""
 
                 # Column E in new Excel
-                cell_e = ws.cell(row=i, column=5, value="-")
+                cell_e = ws.cell(row=i, column=5)
                 cell_e.border = thin_border
                 cell_e.alignment = right_alignment
 
@@ -439,12 +471,12 @@ class Ui_MainWindow(object):
                 cell_f.alignment = right_alignment
 
                 # Column G in new Excel
-                cell_g = ws.cell(row=i, column=7, value="-")
+                cell_g = ws.cell(row=i, column=7)
                 cell_g.border = right_cell_border
                 cell_g.alignment = right_alignment
 
             # Last row
-            end_row = data_start_row + len(df) - 1  # if df has X rows, last row is start + X - 1
+            end_row = data_start_row + len(df) - 1
 
             # Merge rows
             merge_start = end_row + 1
@@ -518,24 +550,17 @@ class Ui_MainWindow(object):
                 bottom=Side(style='thick')
             )
 
-            # 11. Save the new Excel file
+            # Save the new Excel file
             guid = uuid.uuid4()
             output_file = f"formatted_output_{guid}.xlsx"
             wb.save(output_file)
 
-            # 11. Notify the user
+            # Notify the user
             QMessageBox.information(None, "Success", f"Data formatted and saved to {output_file}")
 
+            self.reset_state()
         except Exception as e:
             QMessageBox.critical(None, "Error", f"Failed to create formatted Excel:\n{str(e)}")
-
-    def on_headerYesRadioButton_toggled(self, checked):
-        pass
-        # Show or hide the header row input controls based on the radio button state
-        # self.headerRowLabel.setVisible(checked)
-        # self.headerRowLineEdit.setVisible(checked)
-        # self.headerRowLineEdit.setEnabled(checked)
-
 
 if __name__ == "__main__":
     import sys
@@ -545,9 +570,3 @@ if __name__ == "__main__":
     ui.setupUi(MainWindow)
     MainWindow.show()
     sys.exit(app.exec())
-
-    # to do:
-    # remove header
-    # fix numbering system
-    # subtotal per section
-    # check title format with "T"
