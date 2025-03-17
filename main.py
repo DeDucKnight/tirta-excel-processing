@@ -186,7 +186,7 @@ class Ui_MainWindow(object):
                 QMessageBox.critical(None, "Error", f"Failed to read file:\n{str(e)}")
 
     def on_generateButton_clicked(self):
-        # 1. Ensure a file is selected & read the user’s chosen sheet
+        # Ensure a file is selected & read the user’s chosen sheet
         if not hasattr(self, "file_path"):
             QMessageBox.warning(None, "Warning", "Please upload an Excel file first.")
             return
@@ -204,7 +204,7 @@ class Ui_MainWindow(object):
                 material_column = 1
                 price_column = 5
 
-            # calculate total price
+            # Calculate total price
             total_price = 0
 
             for row_data in df.values:
@@ -341,38 +341,35 @@ class Ui_MainWindow(object):
             last_subsection_row = 0
 
             for i, row_data in enumerate(df.values, start=data_start_row):
-                # i is the row in the *new* Excel
-                # row_data is the entire row from the DataFrame
-                
+                # Skip rows with insufficient columns
                 if len(row_data) < 5:
                     continue
 
-                # Column B in new Excel = df col 0 = Numbering
+                # Process Column B: Numbering
                 cell_b = ws.cell(row=i, column=2)
                 cell_b.border = left_cell_border
                 cell_b.alignment = center_alignment
                 cell_b.font = Font(name="Arial", size=10, bold=True)
                 if self.numYesRadioButton.isChecked():
-                        cell_b.value = row_data[0]
+                    cell_b.value = row_data[0]
 
-
-                # Column C in new Excel = df col 1 = Material
+                # Process Column C: Material
                 cell_c = ws.cell(row=i, column=3, value=row_data[material_column])
                 cell_c.border = material_cell_border
                 cell_c.font = Font(name="Arial", size=11, italic=True)
                 cell_c.alignment = left_alignment
 
-                # Column D in new Excel = df col 4 = Bobot % (I)
+                # Process Column D: Bobot % (I)
                 cell_d = ws.cell(row=i, column=4)
                 cell_d.border = thin_border
                 cell_d.font = Font(name="Arial", size=10, italic=True)
                 cell_d.alignment = right_alignment
 
-                # Logic for price column
+                # Process the Price Column (for Column D)
                 price_str = str(row_data[price_column]).strip()
-
                 if price_str.upper() == "T":
-                    if self.numYesRadioButton.isChecked() is not True:
+                    # Title row logic
+                    if not self.numYesRadioButton.isChecked():
                         parse_item = parse_numbered_item(cell_c.value)
                         if parse_item:
                             cell_c.value = parse_item[1]
@@ -380,74 +377,62 @@ class Ui_MainWindow(object):
                         else:
                             cell_b.value = int_to_roman(title_row)
                         title_row += 1
-                    
+                    # Apply bold fonts for title rows
                     cell_b.font = Font(name="Arial Black", size=10, bold=True)
                     cell_c.font = Font(name="Arial Black", size=10, bold=True, italic=True)
-
-                    # calculate subtotal
+                    
+                    # If there's a subtotal from the previous section, write it out.
                     if last_subsection_row > 1 and subsection_total > 0:
-                        cell_subsection_total_label = ws.cell(row=last_subsection_row+1, column=3)
-                        cell_subsection_total_label.border = Border(
-                            left=cell_subsection_total_label.border.left,
-                            right=cell_subsection_total_label.border.right,
+                        row_subtotal = last_subsection_row + 1
+                        # Column C: Subtotal label with double line border
+                        cell_subtotal_label = ws.cell(row=row_subtotal, column=3)
+                        cell_subtotal_label.border = Border(
+                            left=cell_subtotal_label.border.left,
+                            right=cell_subtotal_label.border.right,
                             top=Side(style='double'),
                             bottom=Side(style='double')
                         )
-
-                        cell_subsection_total_value = ws.cell(row=last_subsection_row+1, column=4)
-                        cell_subsection_total_value.value = subsection_total
-                        cell_subsection_total_value.font = Font(bold=True)
-                        cell_subsection_total_value.border = Border(
-                            left=cell_subsection_total_value.border.left,
-                            right=cell_subsection_total_value.border.right,
+                        # Column D: Subtotal value (bold) with double line border
+                        cell_subtotal_value = ws.cell(row=row_subtotal, column=4)
+                        cell_subtotal_value.value = subsection_total
+                        cell_subtotal_value.font = Font(bold=True)
+                        cell_subtotal_value.border = Border(
+                            left=cell_subtotal_value.border.left,
+                            right=cell_subtotal_value.border.right,
                             top=Side(style='double'),
                             bottom=Side(style='double')
                         )
-
-                        # double line border
-                        cell_subtotal_e = ws.cell(row=last_subsection_row+1, column=5)
-                        cell_subtotal_e.border = Border(
-                            left=cell_subtotal_e.border.left,
-                            right=cell_subtotal_e.border.right,
-                            top=Side(style='double'),
-                            bottom=Side(style='double')
-                        )
-
-                        cell_subtotal_f = ws.cell(row=last_subsection_row+1, column=6)
-                        cell_subtotal_f.border = Border(
-                            left=cell_subtotal_f.border.left,
-                            right=cell_subtotal_f.border.right,
-                            top=Side(style='double'),
-                            bottom=Side(style='double')
-                        )
-
-                        cell_subtotal_g = ws.cell(row=last_subsection_row+1, column=7, value="-")
-                        cell_subtotal_g.border = Border(
-                            left=cell_subtotal_g.border.left,
-                            right=cell_subtotal_g.border.right,
-                            top=Side(style='double'),
-                            bottom=Side(style='double')
-                        )
-
-                        # reset subsection row
+                        # Columns E, F, G: Apply double line border
+                        for col in range(5, 8):
+                            ws.cell(row=row_subtotal, column=col).border = Border(
+                                left=ws.cell(row=row_subtotal, column=col).border.left,
+                                right=ws.cell(row=row_subtotal, column=col).border.right,
+                                top=Side(style='double'),
+                                bottom=Side(style='double')
+                            )
+                        # Reset subtotal counters
                         subsection_row = 0
                         subsection_total = 0
                         last_subsection_row = 0
+
                 elif price_str in ["-", "", "nan"]:
-                    # It's an empty cell
+                    # If price cell is a dash, empty, or "nan", leave cell_d blank.
                     cell_d.value = ""
                 else:
                     try:
-                        # Attempt to parse as float
-                        price_float = float(price_str.replace(".", "").replace(",", "."))
+                        # Normalize the price string and convert to float
+                        normalized = price_str.replace(".", "").replace(",", ".")
+                        price_float = float(normalized)
                         price_weight = price_float / total_price
-                        # cell_d.value = round(price_float / total_price, 4)
-                        cell_d.value = price_weight
+                        cell_d.value = round(price_weight, 4)
+                        
+                        # Update subtotal counters
                         subsection_row += 1
                         subsection_total += price_weight
                         last_subsection_row = i
 
-                        if self.numYesRadioButton.isChecked() is not True:
+                        # Process numbering if applicable
+                        if not self.numYesRadioButton.isChecked():
                             parse_item = parse_numbered_item(str(cell_c.value))
                             if parse_item:
                                 cell_c.value = parse_item[1]
@@ -456,100 +441,91 @@ class Ui_MainWindow(object):
                                 cell_b.value = subsection_row
                         else:
                             cell_b.value = row_data[0]
-        
+                    
                     except ValueError:
                         cell_d.value = ""
 
-                # Column E in new Excel
+                # Column E:
                 cell_e = ws.cell(row=i, column=5)
                 cell_e.border = thin_border
                 cell_e.alignment = right_alignment
 
-                # Column F in new Excel
+                # Column F:
                 cell_f = ws.cell(row=i, column=6, value="-")
                 cell_f.border = thin_border
                 cell_f.alignment = right_alignment
 
-                # Column G in new Excel
+                # Column G:
                 cell_g = ws.cell(row=i, column=7)
                 cell_g.border = right_cell_border
                 cell_g.alignment = right_alignment
 
-            # Last row
+            # Calculate the last data row.
             end_row = data_start_row + len(df) - 1
+            final_row = end_row + 1
 
-            # Merge rows
-            merge_start = end_row + 1
-            merge_end = end_row + 2
-
-            # MERGE FOR COLUMN B
-            merged_cell_b = ws.cell(row=merge_start, column=2)
-            merged_cell_b.value = ""
-            merged_cell_b.alignment = center_alignment
-            merged_cell_b.border = Border(
+            # COLUMN B (Column 2) - Leave blank or as needed.
+            cell_B_final = ws.cell(row=final_row, column=2, value="")
+            cell_B_final.alignment = center_alignment
+            cell_B_final.border = Border(
                 left=Side(style='thick'),
                 right=Side(style='thin'),
                 top=Side(style='double'),
                 bottom=Side(style='thick')
             )
-            merged_cell_b.font = Font(bold=True)
+            cell_B_final.font = Font(bold=True)
 
-            # MERGE FOR COLUMN C
-            merged_cell_c = ws.cell(row=merge_start, column=3)
-            merged_cell_c.value = "TOTAL"
-            merged_cell_c.alignment = center_alignment
-            merged_cell_c.border = Border(
+            # COLUMN C (Column 3) - "TOTAL" label.
+            cell_C_final = ws.cell(row=final_row, column=3, value="TOTAL")
+            cell_C_final.alignment = center_alignment
+            cell_C_final.border = Border(
                 left=Side(style='medium'),
                 right=Side(style='medium'),
                 top=Side(style='double'),
                 bottom=Side(style='thick')
             )
-            merged_cell_c.font = Font(bold=True)
+            cell_C_final.font = Font(bold=True)
 
-            # MERGE FOR COLUMN D
-            merged_cell_d = ws.cell(row=merge_start, column=4)
-            merged_cell_d.value = 100.00
-            merged_cell_d.alignment = right_alignment
-            merged_cell_d.border = Border(
+            # COLUMN D (Column 4) - Numeric value (e.g., 100.00).
+            cell_D_final = ws.cell(row=final_row, column=4, value=100.00)
+            cell_D_final.alignment = right_alignment
+            cell_D_final.border = Border(
                 left=Side(style='thin'),
                 right=Side(style='thin'),
                 top=Side(style='double'),
                 bottom=Side(style='thick')
             )
 
-            # MERGE FOR COLUMN E
-            merged_cell_e = ws.cell(row=merge_start, column=5)
-            merged_cell_e.value = "-"
-            merged_cell_e.alignment = right_alignment
-            merged_cell_e.border = Border(
+            # COLUMN E (Column 5) - Placeholder "-" .
+            cell_E_final = ws.cell(row=final_row, column=5, value="-")
+            cell_E_final.alignment = right_alignment
+            cell_E_final.border = Border(
                 left=Side(style='thin'),
                 right=Side(style='thin'),
                 top=Side(style='double'),
                 bottom=Side(style='thick')
             )
 
-            # MERGE FOR COLUMN F
-            merged_cell_f = ws.cell(row=merge_start, column=6)
-            merged_cell_f.value = "-"
-            merged_cell_f.alignment = right_alignment
-            merged_cell_f.border = Border(
+            # COLUMN F (Column 6) - Placeholder "-" .
+            cell_F_final = ws.cell(row=final_row, column=6, value="-")
+            cell_F_final.alignment = right_alignment
+            cell_F_final.border = Border(
                 left=Side(style='thin'),
                 right=Side(style='thin'),
                 top=Side(style='double'),
                 bottom=Side(style='thick')
             )
 
-            # MERGE FOR COLUMN G
-            merged_cell_g = ws.cell(row=merge_start, column=7)
-            merged_cell_g.value = "-"
-            merged_cell_g.alignment = right_alignment
-            merged_cell_g.border = Border(
+            # COLUMN G (Column 7) - Placeholder "-" .
+            cell_G_final = ws.cell(row=final_row, column=7, value="-")
+            cell_G_final.alignment = right_alignment
+            cell_G_final.border = Border(
                 left=Side(style='thin'),
                 right=Side(style='thick'),
                 top=Side(style='double'),
                 bottom=Side(style='thick')
             )
-
+            
             # Save the new Excel file
             guid = uuid.uuid4()
             output_file = f"formatted_output_{guid}.xlsx"
