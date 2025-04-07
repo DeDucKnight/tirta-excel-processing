@@ -209,8 +209,7 @@ class Ui_MainWindow(object):
             for row_data in df.values:
                 price_str = str(row_data[price_column]).strip()
                 try:
-                    normalized = price_str.replace(".", "").replace(",", ".")
-                    price_value = float(normalized)
+                    price_value = float(price_str)
 
                     if math.isnan(price_value):
                         price_value = 0.0
@@ -337,13 +336,22 @@ class Ui_MainWindow(object):
             title_row = 1
             subsection_row = 0
             subsection_total = 0
+            start_subsection_row = 0
             last_subsection_row = 0
+
+            total_cell_refs = []
+            progress_cell_refs = []
+            total_row_formula = "="
+            progress_row_formula = "="
 
             for i, row_data in enumerate(df.values, start=data_start_row):
                 # Skip rows with insufficient columns
                 if len(row_data) < 5:
                     continue
 
+                if start_subsection_row == 0:
+                    start_subsection_row = i+1 # 1st row is title
+                
                 # Process Column B: Numbering
                 cell_b = ws.cell(row=i, column=2)
                 cell_b.border = left_cell_border
@@ -364,10 +372,27 @@ class Ui_MainWindow(object):
                 cell_d.font = Font(name="Arial", size=10, italic=True)
                 cell_d.alignment = right_alignment
 
-                # Process the Price Column (for Column D)
+                # Column E: Presentase pekerjaan % (II)
+                cell_e = ws.cell(row=i, column=5, value=0)
+                cell_e.border = thin_border
+                cell_e.alignment = right_alignment
+
+
+                # Column F: Progress  %  (I X II)
+                cell_f = ws.cell(row=i, column=6)
+                cell_f.border = thin_border
+                cell_f.alignment = right_alignment
+                cell_f.value = f"=D{i}*E{i}/100"
+
+                # Column G: Kumulatif Progress %
+                cell_g = ws.cell(row=i, column=7)
+                cell_g.border = right_cell_border
+                cell_g.alignment = right_alignment
+
+                # Process Sub-Titles
                 price_str = str(row_data[price_column]).strip()
                 if price_str.upper() == "T":
-                    # Title row logic
+                    # Title row
                     if not self.numYesRadioButton.isChecked():
                         parse_item = parse_numbered_item(cell_c.value)
                         if parse_item:
@@ -380,7 +405,10 @@ class Ui_MainWindow(object):
                     cell_b.font = Font(name="Arial Black", size=10, bold=True)
                     cell_c.font = Font(name="Arial Black", size=10, bold=True, italic=True)
                     
-                    # If there's a subtotal from the previous section, write it out.
+                    cell_e.value = ""
+                    cell_f.value = ""
+                    
+                    # Subtotal.
                     if last_subsection_row > 1 and subsection_total > 0:
                         row_subtotal = last_subsection_row + 1
                         # Column C: Subtotal label with double line border
@@ -393,7 +421,7 @@ class Ui_MainWindow(object):
                         )
                         # Column D: Subtotal value (bold) with double line border
                         cell_subtotal_value = ws.cell(row=row_subtotal, column=4)
-                        cell_subtotal_value.value = subsection_total
+                        cell_subtotal_value.value = f"=SUM(D{start_subsection_row}:D{last_subsection_row})"
                         cell_subtotal_value.font = Font(bold=True)
                         cell_subtotal_value.border = Border(
                             left=cell_subtotal_value.border.left,
@@ -403,31 +431,39 @@ class Ui_MainWindow(object):
                         )
                         # Columns E, F, G: Apply double line border
                         for col in range(5, 8):
-                            ws.cell(row=row_subtotal, column=col).border = Border(
-                                left=ws.cell(row=row_subtotal, column=col).border.left,
-                                right=ws.cell(row=row_subtotal, column=col).border.right,
+                            cell = ws.cell(row=row_subtotal, column=col, value="")
+                            cell.border = Border(
+                                left=cell.border.left,
+                                right=cell.border.right,
                                 top=Side(style='double'),
                                 bottom=Side(style='double')
                             )
+                            if col == 7:
+                                cell.value = f"=SUM(F{start_subsection_row}:F{last_subsection_row})"
+                        
+                        # Update total row formula
+                        total_cell_refs.append(f"D{row_subtotal}")
+                        progress_cell_refs.append(f"G{row_subtotal}")
+
                         # Reset subtotal counters
                         subsection_row = 0
                         subsection_total = 0
                         last_subsection_row = 0
-
+                        start_subsection_row = i + 1
                 elif price_str in ["-", "", "nan"]:
-                    # If price cell is a dash, empty, or "nan", leave cell_d blank.
                     cell_d.value = ""
+                    cell_e.value = ""
+                    cell_f.value = ""
                 else:
                     try:
                         # Normalize the price string and convert to float
-                        normalized = price_str.replace(".", "").replace(",", ".")
-                        price_float = float(normalized)
-                        price_weight = price_float / total_price
-                        cell_d.value = round(price_weight, 4)
+                        price_float = float(price_str)
+                        price_weight = price_float / total_price * 100
+                        cell_d.value = round(price_weight, 2)
                         
                         # Update subtotal counters
                         subsection_row += 1
-                        subsection_total += price_weight
+                        subsection_total += price_float
                         last_subsection_row = i
 
                         # Process numbering if applicable
@@ -444,26 +480,62 @@ class Ui_MainWindow(object):
                     except ValueError:
                         cell_d.value = ""
 
-                # Column E:
-                cell_e = ws.cell(row=i, column=5)
-                cell_e.border = thin_border
-                cell_e.alignment = right_alignment
-
-                # Column F:
-                cell_f = ws.cell(row=i, column=6, value="-")
-                cell_f.border = thin_border
-                cell_f.alignment = right_alignment
-
-                # Column G:
-                cell_g = ws.cell(row=i, column=7)
-                cell_g.border = right_cell_border
-                cell_g.alignment = right_alignment
-
-            # Calculate the last data row.
+            # Process the final rows.
             end_row = data_start_row + len(df) - 1
-            final_row = end_row + 1
+            last_subtotal_row = end_row + 1
+            final_row = end_row + 2
 
-            # COLUMN B (Column 2) - Leave blank or as needed.
+            # Last subtotal.
+            if subsection_total > 0:
+                # Column B
+                cell_b = ws.cell(row=last_subtotal_row, column=2, value="")
+                cell_b.border = left_cell_border
+                cell_b.alignment = center_alignment
+                
+                # Column C: Subtotal label with double line border
+                cell_subtotal_label = ws.cell(row=last_subtotal_row, column=3)
+                cell_subtotal_label.border = Border(
+                    left=Side(style='medium'),
+                    right=Side(style='medium'),
+                    top=Side(style='double'),
+                    bottom=Side(style='double')
+                )
+                # Column D: Subtotal value (bold) with double line border
+                cell_subtotal_value = ws.cell(row=last_subtotal_row, column=4)
+                cell_subtotal_value.value = f"=SUM(D{start_subsection_row}:D{last_subsection_row})"
+                cell_subtotal_value.font = Font(bold=True)
+                cell_subtotal_value.border = Border(
+                    left=cell_subtotal_value.border.left,
+                    right=cell_subtotal_value.border.right,
+                    top=Side(style='double'),
+                    bottom=Side(style='double')
+                )
+                # Columns E, F, G: Apply double line border
+                for col in range(5, 8):
+                    cell = ws.cell(row=last_subtotal_row, column=col, value="")
+                    cell.border = Border(
+                        left=cell.border.left,
+                        right=cell.border.right,
+                        top=Side(style='double'),
+                        bottom=Side(style='double')
+                    )
+                    if col == 7:
+                        cell.value = f"=SUM(F{start_subsection_row}:F{last_subsection_row})"
+                        cell.border = Border(
+                            left=cell.border.left,
+                            right=Side(style='thick'),
+                            top=Side(style='double'),
+                            bottom=Side(style='double')
+                        )
+                                
+                # Update total row formula
+                total_cell_refs.append(f"D{last_subtotal_row}")
+                progress_cell_refs.append(f"G{last_subtotal_row}")
+            
+            # Total row
+            ws.row_dimensions[final_row].height = 30
+            
+            # COLUMN B.
             cell_B_final = ws.cell(row=final_row, column=2, value="")
             cell_B_final.alignment = center_alignment
             cell_B_final.border = Border(
@@ -474,7 +546,7 @@ class Ui_MainWindow(object):
             )
             cell_B_final.font = Font(bold=True)
 
-            # COLUMN C (Column 3) - "TOTAL" label.
+            # COLUMN C - "TOTAL" label.
             cell_C_final = ws.cell(row=final_row, column=3, value="TOTAL")
             cell_C_final.alignment = center_alignment
             cell_C_final.border = Border(
@@ -483,10 +555,15 @@ class Ui_MainWindow(object):
                 top=Side(style='double'),
                 bottom=Side(style='thick')
             )
-            cell_C_final.font = Font(bold=True)
+            cell_C_final.font = Font(bold=True, italic=True)
 
-            # COLUMN D (Column 4) - Numeric value (e.g., 100.00).
-            cell_D_final = ws.cell(row=final_row, column=4, value=100.00)
+            # COLUMN D - Total value.
+            if total_cell_refs:
+                total_row_formula = "=" + " + ".join(total_cell_refs)
+            else:
+                total_row_formula = "=0"
+
+            cell_D_final = ws.cell(row=final_row, column=4, value=total_row_formula)
             cell_D_final.alignment = right_alignment
             cell_D_final.border = Border(
                 left=Side(style='thin'),
@@ -495,7 +572,7 @@ class Ui_MainWindow(object):
                 bottom=Side(style='thick')
             )
 
-            # COLUMN E (Column 5) - Placeholder "-" .
+            # COLUMN E.
             cell_E_final = ws.cell(row=final_row, column=5, value="-")
             cell_E_final.alignment = right_alignment
             cell_E_final.border = Border(
@@ -505,7 +582,7 @@ class Ui_MainWindow(object):
                 bottom=Side(style='thick')
             )
 
-            # COLUMN F (Column 6) - Placeholder "-" .
+            # COLUMN F.
             cell_F_final = ws.cell(row=final_row, column=6, value="-")
             cell_F_final.alignment = right_alignment
             cell_F_final.border = Border(
@@ -515,8 +592,13 @@ class Ui_MainWindow(object):
                 bottom=Side(style='thick')
             )
 
-            # COLUMN G (Column 7) - Placeholder "-" .
-            cell_G_final = ws.cell(row=final_row, column=7, value="-")
+            # COLUMN G.
+            if progress_cell_refs:
+                progress_row_formula = "=" + " + ".join(progress_cell_refs)
+            else:
+                progress_row_formula = "=0"
+
+            cell_G_final = ws.cell(row=final_row, column=7, value=progress_row_formula)
             cell_G_final.alignment = right_alignment
             cell_G_final.border = Border(
                 left=Side(style='thin'),
