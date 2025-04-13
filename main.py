@@ -278,7 +278,7 @@ class Ui_MainWindow(object):
 
             # Alignments
             center_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-            left_alignment = Alignment(horizontal="left", vertical="center")
+            left_alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
             right_alignment = Alignment(horizontal="right", vertical="center")
 
             # Header Titles
