@@ -149,7 +149,7 @@ class Ui_MainWindow(object):
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "Bobot Progress - Lapangan"))
         self.uploadButton.setText(_translate("MainWindow", "Pilih file"))
         self.fileNameLabel.setText(_translate("MainWindow", "Tidak ada file"))
         self.sheetLabel.setText(_translate("MainWindow", "Pilih worksheet:"))
