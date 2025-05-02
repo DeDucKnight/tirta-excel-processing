@@ -372,14 +372,18 @@ class Ui_MainWindow(object):
                 cell_d.font = Font(name="Arial", size=10, italic=True)
                 cell_d.alignment = right_alignment
 
+                accounting_format = '_(* #,##0.00_);_(* (#,##0.00);_(* "-"??_);_(@_)'
+
                 # Column E: Presentase pekerjaan % (II)
                 cell_e = ws.cell(row=i, column=5, value=0)
+                cell_e.number_format = accounting_format
                 cell_e.border = thin_border
                 cell_e.alignment = right_alignment
 
 
                 # Column F: Progress  %  (I X II)
                 cell_f = ws.cell(row=i, column=6)
+                cell_f.number_format = accounting_format
                 cell_f.border = thin_border
                 cell_f.alignment = right_alignment
                 cell_f.value = f"=D{i}*E{i}/100"
